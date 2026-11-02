@@ -24,11 +24,20 @@ export function canonical(value: unknown): string {
   if (value===null || typeof value==='string' || typeof value==='boolean') return JSON.stringify(value);
   if (typeof value==='number') { invariant(Number.isFinite(value),'invalid_json','Finite numbers required'); return JSON.stringify(value); }
   if (Array.isArray(value)) {
-    for(let index=0;index<value.length;index++) invariant(Object.hasOwn(value,index),'invalid_json','Dense JSON arrays required');
+    invariant(Object.getPrototypeOf(value)===Array.prototype && Reflect.ownKeys(value).length===value.length+1,'invalid_json','Plain JSON arrays without extra properties required');
+    for(let index=0;index<value.length;index++) {
+      const property=Object.getOwnPropertyDescriptor(value,String(index));
+      invariant(property && Object.hasOwn(property,'value') && property.enumerable,'invalid_json','Dense JSON data elements required');
+    }
     return '['+value.map(canonical).join(',')+']';
   }
   invariant(typeof value==='object' && Object.getPrototypeOf(value)===Object.prototype,'invalid_json','Plain JSON required');
-  return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical((value as Record<string,unknown>)[k])).join(',')+'}';
+  const keys=Reflect.ownKeys(value);
+  invariant(keys.every(key=>{
+    const property=Object.getOwnPropertyDescriptor(value,key);
+    return typeof key==='string' && property && property.enumerable && Object.hasOwn(property,'value');
+  }),'invalid_json','Enumerable JSON data properties required');
+  return '{'+(keys as string[]).sort().map(k=>JSON.stringify(k)+':'+canonical(Object.getOwnPropertyDescriptor(value,k)!.value)).join(',')+'}';
 }
 export function digest(value: unknown): string { return createHash('sha256').update(canonical(value)).digest('hex'); }
 export function hashBytes(bytes: Uint8Array): string { return createHash('sha256').update(bytes).digest('hex'); }

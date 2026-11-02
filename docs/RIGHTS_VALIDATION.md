@@ -12,6 +12,10 @@ Previously a string-shaped `purposes` value used JavaScript substring matching. 
 
 The canonical JSON profile also rejects sparse arrays. A one-hole JavaScript array previously serialized to the same canonical text as an empty array, undermining an exact evidence binding. Dense arrays, including explicit null elements, retain their existing digests. This does not change hashes of valid JSON documents or the participant review digest profile.
 
+Arrays must also have the ordinary array prototype and only their dense data elements and length. Non-JSON method overrides, annotations, symbols and custom array prototypes are rejected rather than ignored. Otherwise an overridden `includes` method could grant arbitrary purposes after canonicalization discarded that override. Plain objects require enumerable string-keyed data properties; accessors and hidden/symbol metadata are rejected without invoking their getters. Frozen ordinary JSON values remain supported. A digest must contain exactly 64 lowercase hexadecimal characters; a trailing newline is invalid.
+
+The expanded local suite passes all 60 tests, including the existing real embedded-database registry/participant/HTTP/client cases, and both typecheck and build. These checks used the pinned dependency from the local offline package cache; no substitute connector or credential was used. PostgreSQL network contention and final-head CI remain separate evidence.
+
 Run `node --test tests/rights.test.ts tests/rights-validation.test.ts` for the focused cases and `npm run check` for typechecking, all available adapters/tests, build and registry validation. Current-head CI must be inspected separately. Runtime validation does not prove persistence, database isolation or a hosted integration.
 
 ## Authority boundary

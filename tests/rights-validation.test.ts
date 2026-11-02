@@ -82,3 +82,36 @@ test('sparse JSON arrays cannot collide with empty evidence arrays', () => {
   assert.equal(canonical([]), '[]');
   assert.equal(canonical([null]), '[null]');
 });
+
+test('array method overrides cannot turn explicit purposes into arbitrary grants', () => {
+  const purposes = ['education'];
+  Object.defineProperty(purposes, 'includes', { value: (purpose: string) => purpose !== '*' });
+  const rights = { ...grant(), purposes };
+  const agreement = { ...consent(), purposes };
+  assert.throws(() => decideUse({ ...context, purpose: 'advertising' }, resource, request, [rights], [agreement]), { code: 'invalid_json' });
+});
+
+test('canonical JSON arrays have no ignored metadata or custom prototypes', () => {
+  const annotated = Object.assign(['education'], { ignored: 'not-part-of-JSON' });
+  assert.throws(() => canonical(annotated), { code: 'invalid_json' });
+  const symbol = ['education'];
+  Object.defineProperty(symbol, Symbol('ignored'), { value: true });
+  assert.throws(() => canonical(symbol), { code: 'invalid_json' });
+  class CustomArray extends Array<string> {}
+  assert.throws(() => canonical(new CustomArray('education')), { code: 'invalid_json' });
+  assert.equal(canonical(Object.freeze(['education'])), '["education"]');
+});
+
+test('digest validation rejects a trailing newline rather than accepting a near-match', () => {
+  assert.throws(() => decideUse(context, { ...resource, digest: resource.digest + '\n' }, request, [grant()], [consent()]), { code: 'invalid_digest' });
+});
+
+test('canonical evidence rejects accessors and non-JSON object metadata', () => {
+  let calls = 0;
+  const accessor = Object.defineProperty({}, 'purpose', { enumerable: true, get: () => { calls++; return 'education'; } });
+  assert.throws(() => canonical(accessor), { code: 'invalid_json' });
+  assert.equal(calls, 0);
+  assert.throws(() => canonical(Object.defineProperty({}, 'hidden', { value: 'not-serialized' })), { code: 'invalid_json' });
+  assert.throws(() => canonical({ [Symbol('hidden')]: 'not-serialized' }), { code: 'invalid_json' });
+  assert.equal(canonical(Object.freeze({ purpose: 'education' })), '{"purpose":"education"}');
+});
