@@ -167,6 +167,9 @@ function matching(ctx: Context, resource: UseResource, request: UseRequest, perm
 
 /** Each action is independent. Metadata access never implies copying, training, or distribution. */
 export function decideUse(ctx: Context, resource: UseResource, request: UseRequest, grants: readonly RightsGrant[], consents: readonly Consent[]): UseDecision {
+  // Capture every collection and field before matching. Custom iterators, filters
+  // and getters must not change the meaning between validation and selection.
+  ({ ctx, resource, request, grants, consents } = copyJson({ ctx, resource, request, grants, consents }));
   assertContext(ctx);
   assertRef(ctx, resource.ref);
   assertDigest(resource.digest);

@@ -21,3 +21,9 @@ Run `node --test tests/rights.test.ts tests/rights-validation.test.ts` for the f
 ## Authority boundary
 
 These checks establish record shape and matching behavior, not the authenticity or legal validity of evidence. The host must authenticate actors, enforce scope and permission-manager/participant authority, provide the trusted resource's required subjects, read current permission revisions and establish actual rights/consent qualification. The pure library is not an authorization service or an atomic downstream action fence. Public accessibility is never inferred consent, a permission grant never authorizes release, and software never approves its own legal or financial activity.
+
+## Complete decision input capture
+
+Review of PR9 reproduced three additional caller-object bypasses on source `2424027e659bfdbdd6c4336e821837a8e0bf582c`: a stateful required-subject iterator skipped the final consent loop, an overridden grant-collection filter bypassed purpose matching, and a changing required-subject getter removed the requirement after its shape check. All three returned without the expected rejection. `decideUse` now validates and detaches the complete context, resource, request and permission collections as ordinary JSON before reading or matching any field. Nineteen focused rejection groups pass after the change; full new-head local, installed-package and CI evidence remain separate.
+
+This is an ordinary JSON boundary, not an isolation boundary against executing arbitrary JavaScript proxies or a compromised runtime. Hosts must enforce ingress/CPU/heap limits and authenticate their context and resource registrations. Valid dense JSON retains its digest profile; migrations, SDK pins, permission identities and decision result fields are unchanged. Private records remain private; no live provider sends, publication or payments are enabled.

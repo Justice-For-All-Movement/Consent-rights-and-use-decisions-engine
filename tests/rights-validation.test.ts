@@ -115,3 +115,27 @@ test('canonical evidence rejects accessors and non-JSON object metadata', () => 
   assert.throws(() => canonical({ [Symbol('hidden')]: 'not-serialized' }), { code: 'invalid_json' });
   assert.equal(canonical(Object.freeze({ purpose: 'education' })), '{"purpose":"education"}');
 });
+
+test('required subject iterator overrides cannot suppress participant consent', () => {
+  const subjects = ['participant'];
+  let traversals = 0;
+  Object.defineProperty(subjects, Symbol.iterator, { value: function* () {
+    if (++traversals <= 2) yield 'participant';
+  } });
+  assert.throws(() => decideUse(context, { ...resource, requiredConsentSubjects: subjects }, request, [grant()], []), { code: 'invalid_json' });
+});
+
+test('permission collection filter overrides cannot substitute an unmatched grant', () => {
+  const rights = [grant()];
+  Object.defineProperty(rights, 'filter', { value: () => rights });
+  assert.throws(() => decideUse({ ...context, purpose: 'advertising' }, { ...resource, requiredConsentSubjects: [] }, request, rights, []), { code: 'invalid_json' });
+});
+
+test('decision input accessors are rejected before they can change a checked purpose', () => {
+  let calls = 0;
+  const subjectResource = Object.defineProperty({ ...resource }, 'requiredConsentSubjects', {
+    enumerable: true, get: () => { calls++; return calls === 1 ? ['participant'] : []; },
+  });
+  assert.throws(() => decideUse(context, subjectResource, request, [grant()], []), { code: 'invalid_json' });
+  assert.equal(calls, 0);
+});
