@@ -31,3 +31,7 @@ Participant HTTP authentication and body admission now use monotonic checks arou
 ## Explicit participant client
 
 The opt-in [participant client](PARTICIPANT_CLIENT.md) consumes only the accepted session/review/respond/own-consent-withdrawal HTTP routes. It captures exact reviewed terms, requires an explicit decision/acknowledgement and keeps immutable pending commands after uncertain or rejected writes for explicit identical replay. It uses platform Web Crypto for profile consistency, not authentication or consent qualification. Current server authority, host session/logout/purpose binding and accessible participant presentation remain mandatory; no mounted UI, persistent reload recovery or browser/live acceptance is claimed.
+
+## Current-time owning decisions
+
+The additive [current evaluation](CURRENT_EVALUATION.md) API samples a trusted synchronous host clock after the owning project lock and all current resource/permission reads. It preserves the legacy request-time method. Observed `checkedAt` belongs to the decision; the audit envelope remains request metadata. This resolves stale request-time expiry across database waits for explicitly upgraded consumers, without claiming authority over a later action or distributed permission fencing.
