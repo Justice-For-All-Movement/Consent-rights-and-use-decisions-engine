@@ -46,6 +46,7 @@
     "tests/rights-validation.test.ts": "b30427cbdab2e05fa33c24aee0f7e8cccabb6a0f4c11d3310ecd3d597dfc054d",
     "README.md": "c26509dcf85b232521458abbc6590a5e3fe057df25663728f01b4e64d835dad3",
     "docs/RIGHTS_VALIDATION.md": "f81773f2ddc1b6a3629e6a76fe1f1ee3f73a3e6b6ea6eb5bbf3884dab063a2e3",
-    "registry/prs.json": "563a503ff37d42c787fa84944e613519234f4950e13ba09277537ef3261fad60"
-  }
+    "registry/prs.json": "b54d2ed41ca0ebcb7bbf4cc2cc75e3b97b0037e3b0f002c690d6befc0615d342"
+  },
+  "checkpointMetadataCorrection": "82d068235ad823db2f2f2c35cb56e7412d41187d CI41842869223 passed all63 tests and six PostgreSQL17 groups but registry rejected fractional seconds in observedAt; corrected to required second-resolution UTC profile. No runtime change."
 }
