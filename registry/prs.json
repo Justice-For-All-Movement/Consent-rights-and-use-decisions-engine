@@ -4,7 +4,7 @@
   "roadmapVersion": 1,
   "planVerified": true,
   "plannedPrCount": 6,
-  "observedAt": "2026-11-04T14:00:00Z",
+  "observedAt": "2026-11-04T13:56:53.616082+00:00",
   "units": [
     {
       "id": "CRU-001",
@@ -22,14 +22,15 @@
         "Purpose-specific rights and explicit consent"
       ],
       "acceptanceCriteria": "Verify required behavior, rejection paths, source-bound test evidence and private defaults; live acceptance remains separate.",
-      "implementationStatus": "partial_runtime_permission_validation_and_detached_decision_inputs; PR9 existing 60-test CI on 2424027 passed including six prior PostgreSQL17 groups. Review reproduced three additional custom collection/accessor bypasses; all19 focused rejection groups now pass. Full new-head local/installed/CI validation pending.",
+      "implementationStatus": "partial_runtime_permission_validation_and_detached_decision_inputs; PR9 63 ordinary local and installed compiled public-export tests/typecheck/build/registry pass. Source a41488fe CI41842443320/check126617251993 passed63 and postgres126617252572 passed six EXISTING PostgreSQL17 groups, raw logs inspected. Final-head checks required. No new network scenario, authentication, rights/consent validity or live qualification.",
       "remainingWork": [
         "Trusted host identity/current policy/time and resource requirements; independent rights/consent qualification",
         "Consumer current-permission integration and downstream action fencing; production and live acceptance"
       ],
       "implementationEvidence": {
         "pullRequest": "https://github.com/neophilism/Consent-rights-and-use-decisions-engine/pull/9",
-        "verification": "docs/RIGHTS_VALIDATION.md"
+        "verification": "docs/RIGHTS_VALIDATION.md",
+        "sourceBoundVerification": "docs/rights-validation-verification.json"
       }
     },
     {
@@ -50,14 +51,15 @@
         "Exact revision use decisions expiry and withdrawal"
       ],
       "acceptanceCriteria": "Verify required behavior, rejection paths, source-bound test evidence and private defaults; live acceptance remains separate.",
-      "implementationStatus": "partial_runtime_permission_validation_and_detached_decision_inputs; PR9 existing 60-test CI on 2424027 passed including six prior PostgreSQL17 groups. Review reproduced three additional custom collection/accessor bypasses; all19 focused rejection groups now pass. Full new-head local/installed/CI validation pending.",
+      "implementationStatus": "partial_runtime_permission_validation_and_detached_decision_inputs; PR9 63 ordinary local and installed compiled public-export tests/typecheck/build/registry pass. Source a41488fe CI41842443320/check126617251993 passed63 and postgres126617252572 passed six EXISTING PostgreSQL17 groups, raw logs inspected. Final-head checks required. No new network scenario, authentication, rights/consent validity or live qualification.",
       "remainingWork": [
         "Trusted host identity/current policy/time and resource requirements; independent rights/consent qualification",
         "Consumer current-permission integration and downstream action fencing; production and live acceptance"
       ],
       "implementationEvidence": {
         "pullRequest": "https://github.com/neophilism/Consent-rights-and-use-decisions-engine/pull/9",
-        "verification": "docs/RIGHTS_VALIDATION.md"
+        "verification": "docs/RIGHTS_VALIDATION.md",
+        "sourceBoundVerification": "docs/rights-validation-verification.json"
       }
     },
     {
