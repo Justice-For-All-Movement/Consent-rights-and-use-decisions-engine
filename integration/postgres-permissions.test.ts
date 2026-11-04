@@ -444,3 +444,110 @@ test(
     );
   },
 );
+
+test(
+  "current-time evaluation samples expiry after an independently observed owning lock wait",
+  { timeout: 20000 },
+  async (t) => {
+    const f = await fixture(t, "current-time-lock");
+    const accepted = await f.sa.respondToOffer(
+      f.participant,
+      f.command,
+      "accept",
+    );
+    const request = {
+      action: "reproduce" as const,
+      audience: "private",
+      attribution: null,
+    };
+    const ids = { rights: ["rights"], consents: [accepted.consent!.ref.id] };
+    let now = f.manager.now,
+      calls = 0;
+    assert.equal(
+      (
+        await f.sb.evaluateCurrent(
+          f.manager,
+          f.resource.ref,
+          request,
+          ids,
+          () => now,
+        )
+      ).allowed,
+      true,
+    );
+    const locked = gate(),
+      release = gate();
+    // Real public registration writes hold their owning project lock before actual COMMIT.
+    const delayed: Database = {
+      transaction: (fn) =>
+        f.a.transaction(async (q) => {
+          const value = await fn(q);
+          locked.resolve();
+          await release.promise;
+          return value;
+        }),
+      close: async () => {},
+    };
+    const hold = new PermissionRegistry(delayed, f.policy).registerResource(
+      f.manager,
+      f.resource,
+      1,
+    );
+    let pending: ReturnType<PermissionRegistry["evaluateCurrent"]> | undefined;
+    try {
+      await Promise.race([locked.promise, hold]);
+      pending = f.sb.evaluateCurrent(
+        f.manager,
+        f.resource.ref,
+        request,
+        ids,
+        () => {
+          calls++;
+          return now;
+        },
+      );
+      const outcome = pending.then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
+      await observedLock(f.id + "-b"); // Independent session requires Lock and nonempty blocking PIDs.
+      assert.equal(
+        calls,
+        0,
+        "Clock must not be sampled before the owning lock and reads",
+      );
+      now = f.input.terms.expiresAt;
+      release.resolve();
+      await hold;
+      const result = await outcome;
+      assert.ok("value" in result);
+      assert.equal(calls, 1);
+      assert.equal(result.value.allowed, false);
+      assert.equal(result.value.checkedAt, now);
+      assert.deepEqual(result.value.reasons, [
+        "rights_not_granted",
+        "consent_not_granted:subject",
+      ]);
+      // The explicitly retained legacy API still uses the earlier request timestamp.
+      assert.equal(
+        (await f.sb.evaluate(f.manager, f.resource.ref, request, ids)).allowed,
+        true,
+      );
+      const fresh = f.connect("fresh-current");
+      const current = await new PermissionRegistry(
+        fresh,
+        f.policy,
+      ).evaluateCurrent(f.manager, f.resource.ref, request, ids, () => now);
+      assert.equal(current.allowed, false);
+      await scoped(fresh, f.manager, async (tx) => {
+        assert.equal((await tx.list("rights-grant"))[0]?.revision, 1);
+        assert.equal((await tx.list("consent"))[0]?.revision, 1);
+        assert.ok(verifyAudit(await tx.audits()));
+      });
+    } finally {
+      release.resolve();
+      await hold;
+      await pending?.catch(() => {});
+    }
+  },
+);
