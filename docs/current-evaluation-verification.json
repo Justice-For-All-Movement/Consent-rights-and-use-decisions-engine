@@ -1,0 +1,61 @@
+{
+  "observedAt": "2026-11-04T14:09:23Z",
+  "scope": "CRU-002/003/006 opt-in owning current-time decision; partial suite",
+  "local": {
+    "ordinaryTests": 68,
+    "newRestrictedPGliteGroups": 5,
+    "typecheck": "passed",
+    "build": "passed",
+    "registry": "passed",
+    "networkExecution": "not available locally"
+  },
+  "installed": {
+    "ordinaryTests": 68,
+    "compiledPublicExports": "all tests rewritten to installed exports, full TAP/no skips",
+    "compiledRegistry": "byte matched build"
+  },
+  "initialCi": {
+    "source": "ea084b513afc2231d670babff2ec94cc79370755",
+    "run": 41843890144,
+    "check": 126622267220,
+    "ordinaryTests": 68,
+    "postgres": 126622266118,
+    "priorNetworkGroups": 6,
+    "logsInspected": true
+  },
+  "expandedPostgresCi": {
+    "source": "5804ddd505539cbf04d35c2369b9f4183323b6bf",
+    "run": 41844412743,
+    "postgres": 126624056052,
+    "actualRestrictedPostgres17Groups": 7,
+    "newScenario": "Mandatory independently observed Lock and nonempty blocking PIDs behind real public resource registration before advancing clock to expiry; one post-lock sample, denied decision, fresh-pool denial, original permission revisions and valid audit chain",
+    "logsInspected": true
+  },
+  "review": [
+    "Complete ordinary JSON capture and fixed scoped read admission before SQL; no permission objects/current resource requirements supplied by caller",
+    "Existing project lock before every actual permission read; clock only sampled after final permission read",
+    "Synchronous bounded string clock, nonregression, sanitized callback DomainErrors; failed decision rolls back checked audit",
+    "Legacy signature/request-time semantics retained; no schema, migration, dependency or existing decision fields changed",
+    "No cached decision, new permission revision or effect outbox; lost acknowledgement remains UNKNOWN"
+  ],
+  "limitations": [
+    "Host proofing, current roles/policy, subject mapping, rights/consent validity, trusted clock and driver/CPU/heap limits remain required",
+    "Decision can expire/be revoked after sample or during audit/COMMIT; not future execution/release permit or distributed fence",
+    "Clock callback must be synchronous and must not start background work; no cancellation/SQL deadline or time authentication provided",
+    "Only declared disposable PostgreSQL scenario qualifies; production remote TLS/crash/failover/multinode/throughput/browser/AT/live acceptance remain pending",
+    "Private-only; no routes/provider sends/publication/payment/paid infrastructure/PAM changes"
+  ],
+  "sourceSha256": {
+    "src/registry.ts": "60d9e173cc1615edd81b79226b8f4d125a5bef10e30fe826d86a11215c692542",
+    "tests/current-evaluation.test.ts": "dfd77e4a9767fc9e796b291625d727b0f0e805788123ebbe54ed87b974005d36",
+    "integration/postgres-permissions.test.ts": "27208db48c9efdc08a5f84ad7196d5c14b98c4a714b1cf6ce8c835809309a0c9",
+    "docs/CURRENT_EVALUATION.md": "c80169f5515ab399e1c13565e57b2da96d37af5d4d0e52a19cc7380cfbf54617",
+    "docs/ARCHITECTURE.md": "822ef60b0e98462ae27117ca690f1915650850568560bde7a54378b90d6a60fc",
+    "docs/POSTGRES_TESTS.md": "94674b53656099d36c810ed03e8a762374bac74108a800d855cb16f744af66b0",
+    "registry/prs.json": "b1716e40a1e55da3f242f20f65ea796598b74702648579386c752babdba19ae5",
+    "package.json": "fe36b4b5eff324b1886643985b938b5acd3904a3dff2fccee4e00aae8a6d9bae",
+    "package-lock.json": "5bda44412e7a475cfc2563739d2643079dc6b4bf681614ca4459b9da3dcfb501",
+    "src/index.ts": "62ea5543400450ee419338a95ccc5a5b9c563e29c047a88cc98c291e9773f8ac",
+    "src/contracts.ts": "34e721b34977805d54db1bda42a2c65594fc44111b421cbd7b865aa646435e70"
+  }
+}

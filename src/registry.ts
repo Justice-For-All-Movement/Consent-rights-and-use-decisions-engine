@@ -18,6 +18,7 @@ import {
   decideUse,
   exactBinding,
   assertContext,
+  copyJson,
 } from "./index.ts";
 import type {
   RightsGrant,
@@ -219,11 +220,57 @@ export class PermissionRegistry {
       );
     }) as Promise<unknown> as Promise<Consent | RightsGrant>;
   }
+  /** Observe permission time after the owning lock and all stored permission reads.
+   * The synchronous clock and authenticated context are trusted host inputs.
+   */
+  async evaluateCurrent(
+    c: Context,
+    ref: Ref,
+    request: UseRequest,
+    ids: { rights: readonly string[]; consents: readonly string[] },
+    clock: () => string,
+  ): Promise<UseDecision> {
+    invariant(
+      typeof clock === "function",
+      "clock_unavailable",
+      "Current permission clock unavailable",
+    );
+    ({ c, ref, request, ids } = copyJson({ c, ref, request, ids }));
+    assertContext(c);
+    invariant(
+      ids &&
+        typeof ids === "object" &&
+        !Array.isArray(ids) &&
+        Object.keys(ids).length === 2 &&
+        Array.isArray(ids.rights) &&
+        Array.isArray(ids.consents),
+      "invalid_permission",
+      "Explicit permission ID collections required",
+    );
+    for (const collection of [ids.rights, ids.consents]) {
+      invariant(
+        collection.length <= 100,
+        "too_many_permissions",
+        "At most100grant and100consent IDs per decision",
+      );
+      for (const id of collection) nonempty(id, "Permission ID", 200);
+    }
+    return this.#evaluate(c, ref, request, ids, clock);
+  }
   async evaluate(
     c: Context,
     ref: Ref,
     request: UseRequest,
     ids: { rights: readonly string[]; consents: readonly string[] },
+  ): Promise<UseDecision> {
+    return this.#evaluate(c, ref, request, ids);
+  }
+  async #evaluate(
+    c: Context,
+    ref: Ref,
+    request: UseRequest,
+    ids: { rights: readonly string[]; consents: readonly string[] },
+    clock?: () => string,
   ): Promise<UseDecision> {
     c = structuredClone(c);
     ref = structuredClone(ref);
@@ -265,7 +312,37 @@ export class PermissionRegistry {
         const row = await tx.get<Consent>("consent", key("consent", id));
         if (row) consents.push(row.value);
       }
-      const decision = decideUse(c, resource, request, rights, consents);
+      let decisionContext = c;
+      if (clock) {
+        let now: string;
+        try {
+          now = clock();
+          invariant(
+            typeof now === "string" && now.length <= 128,
+            "clock_unavailable",
+            "Current permission clock unavailable",
+          );
+          invariant(
+            validTime(now) >= validTime(c.now),
+            "clock_unavailable",
+            "Current permission clock unavailable",
+          );
+        } catch {
+          invariant(
+            false,
+            "clock_unavailable",
+            "Current permission clock unavailable",
+          );
+        }
+        decisionContext = { ...c, now };
+      }
+      const decision = decideUse(
+        decisionContext,
+        resource,
+        request,
+        rights,
+        consents,
+      );
       await tx.audit("permission.evaluated", {
         resource: ref as unknown as Json,
         allowed: decision.allowed,

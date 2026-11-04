@@ -4,7 +4,7 @@
   "roadmapVersion": 1,
   "planVerified": true,
   "plannedPrCount": 6,
-  "observedAt": "2026-11-04T14:00:20Z",
+  "observedAt": "2026-11-04T14:09:23Z",
   "units": [
     {
       "id": "CRU-001",
@@ -22,7 +22,7 @@
         "Purpose-specific rights and explicit consent"
       ],
       "acceptanceCriteria": "Verify required behavior, rejection paths, source-bound test evidence and private defaults; live acceptance remains separate.",
-      "implementationStatus": "partial_runtime_permission_validation_and_detached_decision_inputs; PR9 63 ordinary local and installed compiled public-export tests/typecheck/build/registry pass. Source a41488fe CI41842443320/check126617251993 passed63 and postgres126617252572 passed six EXISTING PostgreSQL17 groups, raw logs inspected. Final-head checks required. No new network scenario, authentication, rights/consent validity or live qualification.",
+      "implementationStatus": "partial_runtime_permission_validation; PR9 merged31ff5387acac1f49ef36cad668188747697d1aef after final source f8a8236b CI41843362767 passed63 ordinary and six PostgreSQL17 scenarios. All63 local/installed compiled public-export tests pass; rights/identity/live qualification remain separate.",
       "remainingWork": [
         "Trusted host identity/current policy/time and resource requirements; independent rights/consent qualification",
         "Consumer current-permission integration and downstream action fencing; production and live acceptance"
@@ -40,7 +40,8 @@
       "prs": [],
       "contributingPrs": [
         1,
-        9
+        9,
+        10
       ],
       "dependsOn": [
         "CRU-001"
@@ -51,15 +52,18 @@
         "Exact revision use decisions expiry and withdrawal"
       ],
       "acceptanceCriteria": "Verify required behavior, rejection paths, source-bound test evidence and private defaults; live acceptance remains separate.",
-      "implementationStatus": "partial_runtime_permission_validation_and_detached_decision_inputs; PR9 63 ordinary local and installed compiled public-export tests/typecheck/build/registry pass. Source a41488fe CI41842443320/check126617251993 passed63 and postgres126617252572 passed six EXISTING PostgreSQL17 groups, raw logs inspected. Final-head checks required. No new network scenario, authentication, rights/consent validity or live qualification.",
+      "implementationStatus": "partial_owning_current_time_decisions; PR10 evaluateCurrent samples trusted synchronous clock AFTER actual owning project lock and current resource/permission reads; legacy request-time API preserved. All68 local and installed compiled public-export tests/typecheck/build/registry pass. Initial sourceea084b5 CI41843890144/check126622267220 passed68 and six prior PostgreSQL17 groups. Expanded source5804ddd CI41844412743/postgres126624056052 passed allSEVEN restricted PostgreSQL17 groups including required independently observed lock-wait expiry; raw logs inspected. Final-head CI remains required. No live rights/identity/clock qualification, future permit or distributed fence.",
       "remainingWork": [
-        "Trusted host identity/current policy/time and resource requirements; independent rights/consent qualification",
-        "Consumer current-permission integration and downstream action fencing; production and live acceptance"
+        "Authenticated current consumer integration; host resource/subject mapping, rights ownership/informed consent/clock and production qualification",
+        "Cross-engine permission changes are not atomically fenced; deployment and live acceptance remain separate"
       ],
       "implementationEvidence": {
         "pullRequest": "https://github.com/neophilism/Consent-rights-and-use-decisions-engine/pull/9",
         "verification": "docs/RIGHTS_VALIDATION.md",
-        "sourceBoundVerification": "docs/rights-validation-verification.json"
+        "sourceBoundVerification": "docs/rights-validation-verification.json",
+        "currentEvaluation": "docs/CURRENT_EVALUATION.md",
+        "currentEvaluationPullRequest": "https://github.com/neophilism/Consent-rights-and-use-decisions-engine/pull/10",
+        "currentEvaluationVerification": "docs/current-evaluation-verification.json"
       }
     },
     {
@@ -69,7 +73,8 @@
       "prs": [],
       "contributingPrs": [
         2,
-        5
+        5,
+        10
       ],
       "dependsOn": [
         "CRU-002"
@@ -80,7 +85,16 @@
         "Persistent permission registry and supersession"
       ],
       "acceptanceCriteria": "Verify required behavior, rejection paths, source-bound test evidence and private defaults; live acceptance remains separate.",
-      "implementationStatus": "Durable permission/participant foundations with PR5 current-read serialization fix: checked audit acquires project lock BEFORE all evaluation reads. Real unchanged-runtime regression CI40584349719/job122471750816 reproduced stale allowed=true after committed consent withdrawal; all six corrected scenarios passed CI40584914929/job122473701396 on source12137bb50a11764a442bb6dea9a84038e28df8fd; logs inspected. Final-head acceptance remains required. No atomic downstream action fence or production rights/identity qualification."
+      "implementationStatus": "partial_owning_current_time_decisions; PR10 evaluateCurrent samples trusted synchronous clock AFTER actual owning project lock and current resource/permission reads; legacy request-time API preserved. All68 local and installed compiled public-export tests/typecheck/build/registry pass. Initial sourceea084b5 CI41843890144/check126622267220 passed68 and six prior PostgreSQL17 groups. Expanded source5804ddd CI41844412743/postgres126624056052 passed allSEVEN restricted PostgreSQL17 groups including required independently observed lock-wait expiry; raw logs inspected. Final-head CI remains required. No live rights/identity/clock qualification, future permit or distributed fence.",
+      "remainingWork": [
+        "Authenticated current consumer integration; host resource/subject mapping, rights ownership/informed consent/clock and production qualification",
+        "Cross-engine permission changes are not atomically fenced; deployment and live acceptance remain separate"
+      ],
+      "implementationEvidence": {
+        "currentEvaluation": "docs/CURRENT_EVALUATION.md",
+        "currentEvaluationPullRequest": "https://github.com/neophilism/Consent-rights-and-use-decisions-engine/pull/10",
+        "currentEvaluationVerification": "docs/current-evaluation-verification.json"
+      }
     },
     {
       "id": "CRU-004",
@@ -143,7 +157,8 @@
       "origin": "original",
       "prs": [],
       "contributingPrs": [
-        5
+        5,
+        10
       ],
       "dependsOn": [
         "CRU-004",
@@ -155,7 +170,16 @@
         "Integration and reusable release acceptance"
       ],
       "acceptanceCriteria": "Verify required behavior, rejection paths, source-bound test evidence and private defaults; live acceptance remains separate.",
-      "implementationStatus": "Partial PR5: six disposable PostgreSQL17 restricted TCP-session scenarios (acceptance/decline/cancel, observed consent and rights withdrawal waits, lost acknowledgement/fresh pool, roles/scopes), one ordinary group with four unsafe fixture rejections. 31 local groups/typecheck/build/registry pass. Actual corrected-source and all final-head CI/installed package evidence are separate; deployment and live release acceptance remain pending. All 16 registry/participant groups pass through freshly packed installed compiled public exports. Intermediate corrected runtime passed the consent lock regression; new rights test identity fixture was corrected from participant to required manager. Six-group final-head acceptance remains required. All six corrected network groups passed CI40584914929/job122473701396 on source12137bb50a11764a442bb6dea9a84038e28df8fd, logs inspected. This is limited disposable PostgreSQL17 evidence, not production/deployment acceptance."
+      "implementationStatus": "partial_owning_current_time_decisions; PR10 evaluateCurrent samples trusted synchronous clock AFTER actual owning project lock and current resource/permission reads; legacy request-time API preserved. All68 local and installed compiled public-export tests/typecheck/build/registry pass. Initial sourceea084b5 CI41843890144/check126622267220 passed68 and six prior PostgreSQL17 groups. Expanded source5804ddd CI41844412743/postgres126624056052 passed allSEVEN restricted PostgreSQL17 groups including required independently observed lock-wait expiry; raw logs inspected. Final-head CI remains required. No live rights/identity/clock qualification, future permit or distributed fence.",
+      "remainingWork": [
+        "Authenticated current consumer integration; host resource/subject mapping, rights ownership/informed consent/clock and production qualification",
+        "Cross-engine permission changes are not atomically fenced; deployment and live acceptance remain separate"
+      ],
+      "implementationEvidence": {
+        "currentEvaluation": "docs/CURRENT_EVALUATION.md",
+        "currentEvaluationPullRequest": "https://github.com/neophilism/Consent-rights-and-use-decisions-engine/pull/10",
+        "currentEvaluationVerification": "docs/current-evaluation-verification.json"
+      }
     }
   ],
   "pullRequests": []
