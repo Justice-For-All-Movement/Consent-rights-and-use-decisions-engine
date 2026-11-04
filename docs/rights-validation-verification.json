@@ -1,0 +1,52 @@
+{
+  "observedAt": "2026-11-04T13:56:53.616082+00:00",
+  "scope": "CRU-001/002 runtime validation; private reusable library only",
+  "local": {
+    "ordinaryTests": 63,
+    "focusedRuntimeValidationTests": 19,
+    "typecheck": "passed",
+    "build": "passed",
+    "registry": "passed",
+    "cleanNpmCi": "passed normal prepare"
+  },
+  "installed": {
+    "ordinaryTests": 63,
+    "fullTap": "passed; zero skips",
+    "compiledIndexAndContracts": "byte matched",
+    "initialHarnessFailure": "Invoked before setup completed; missing modules; full63 rerun after install passed"
+  },
+  "initialCi": {
+    "source": "a41488fe2644e34af07ba9d06e67843bd5764ac9",
+    "run": 41842443320,
+    "check": 126617251993,
+    "ordinaryTests": 63,
+    "postgres": 126617252572,
+    "existingPostgresGroups": 6,
+    "rawLogsInspected": true
+  },
+  "reproducedReviewFailures": {
+    "source": "2424027e659bfdbdd6c4336e821837a8e0bf582c",
+    "groups": 3,
+    "result": "All three missing expected rejection: stateful subject iterator, custom grant filter, changing subject getter"
+  },
+  "review": [
+    "Complete detached JSON input before decision matching",
+    "All supplied permission records validated before selection; exact kind/scope/digest/time/action/purpose/audience and explicit restrictions",
+    "Dense JSON digest and valid participant review profile unchanged; no SDK/schema/migration changes"
+  ],
+  "limitations": [
+    "Host proofing/context/policy/time/resource subjects remain trusted; no authentication or legal consent/rights ownership qualification",
+    "Ordinary JSON boundary does not isolate arbitrary JavaScript proxies or compromised runtime; host ingress/CPU/heap limits required",
+    "Decision is historical snapshot, not execution/release permit or distributed revocation fence",
+    "No new network scenario/local PostgreSQL/Docker/browser/assistive-technology/live input qualification; no sends/publication/payments"
+  ],
+  "sourceSha256": {
+    "src/index.ts": "62ea5543400450ee419338a95ccc5a5b9c563e29c047a88cc98c291e9773f8ac",
+    "src/contracts.ts": "34e721b34977805d54db1bda42a2c65594fc44111b421cbd7b865aa646435e70",
+    "tests/rights-validation.test.ts": "b30427cbdab2e05fa33c24aee0f7e8cccabb6a0f4c11d3310ecd3d597dfc054d",
+    "README.md": "c26509dcf85b232521458abbc6590a5e3fe057df25663728f01b4e64d835dad3",
+    "docs/RIGHTS_VALIDATION.md": "f81773f2ddc1b6a3629e6a76fe1f1ee3f73a3e6b6ea6eb5bbf3884dab063a2e3",
+    "registry/prs.json": "b54d2ed41ca0ebcb7bbf4cc2cc75e3b97b0037e3b0f002c690d6befc0615d342"
+  },
+  "checkpointMetadataCorrection": "82d068235ad823db2f2f2c35cb56e7412d41187d CI41842869223 passed all63 tests and six PostgreSQL17 groups but registry rejected fractional seconds in observedAt; corrected to required second-resolution UTC profile. No runtime change."
+}

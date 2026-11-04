@@ -51,6 +51,7 @@ export function copyJson<T>(value: T): T {
 }
 
 export function assertRef(scope: Scope, ref: Ref): void {
+  invariant(ref !== null && typeof ref === 'object' && !Array.isArray(ref), 'invalid_reference', 'Reference object required');
   requireScope(scope, ref);
   nonempty(ref.kind, 'Reference kind', 100);
   nonempty(ref.id, 'Reference id', 200);
@@ -58,7 +59,7 @@ export function assertRef(scope: Scope, ref: Ref): void {
 }
 
 export function assertDigest(value: string): void {
-  invariant(typeof value === 'string' && /^[a-f0-9]{64}$/.test(value), 'invalid_digest', 'An exact SHA-256 digest is required');
+  invariant(typeof value === 'string' && value.length === 64 && /^[a-f0-9]{64}$/.test(value), 'invalid_digest', 'An exact SHA-256 digest is required');
 }
 
 export function sameRef(a: Ref, b: Ref): boolean {
@@ -87,8 +88,10 @@ function strings(values: readonly string[], label: string): void {
   invariant(new Set(values).size === values.length && !values.includes('*'), 'invalid_permission', `${label} must be unique and cannot use wildcards`);
 }
 
-function validateTerms(ctx: Context, terms: PermissionTerms): void {
+function validateTerms(ctx: Context, terms: PermissionTerms, recording = true): void {
   assertContext(ctx);
+  invariant(terms !== null && typeof terms === 'object' && !Array.isArray(terms), 'invalid_permission', 'Permission terms must be an object');
+  invariant(terms.resource !== null && typeof terms.resource === 'object' && !Array.isArray(terms.resource), 'invalid_permission', 'An exact resource binding is required');
   assertRef(ctx, terms.resource.ref);
   assertDigest(terms.resource.digest);
   assertRef(ctx, terms.evidence);
@@ -97,8 +100,28 @@ function validateTerms(ctx: Context, terms: PermissionTerms): void {
   strings(terms.purposes, 'Purposes');
   strings(terms.audiences, 'Audiences');
   invariant(validTime(terms.validFrom) < validTime(terms.expiresAt), 'invalid_permission', 'Permission expiry must follow its start');
-  invariant(validTime(terms.expiresAt) > validTime(ctx.now), 'permission_expired', 'Cannot record an already expired permission');
+  if (recording) invariant(validTime(terms.expiresAt) > validTime(ctx.now), 'permission_expired', 'Cannot record an already expired permission');
   copyJson(terms);
+}
+
+/** Validate records from the runtime boundary before any collection membership check.
+ * Storage provenance and caller authority still have to be supplied by the host.
+ */
+function validatePermission(ctx: Context, permission: RightsGrant | Consent, kind: 'rights-grant' | 'consent'): void {
+  validateTerms(ctx, permission, false);
+  assertRef(ctx, permission.ref);
+  invariant(permission.ref.kind === kind, 'invalid_permission', 'Permission kind does not match its collection');
+  nonempty(permission.recordedBy, 'Permission recorder', 200);
+  if (permission.withdrawnAt !== null) validTime(permission.withdrawnAt);
+  if (kind === 'rights-grant') {
+    const grant = permission as RightsGrant;
+    nonempty(grant.holderId, 'Rights holder', 200);
+    if (grant.attribution !== null) nonempty(grant.attribution, 'Attribution');
+    invariant(typeof grant.noDerivatives === 'boolean', 'invalid_permission', 'Derivative restrictions must be explicit');
+    invariant(!(grant.noDerivatives && grant.actions.includes('transform')), 'contradictory_rights', 'No-derivatives terms cannot grant transformation');
+  } else {
+    nonempty((permission as Consent).subjectId, 'Consent subject', 200);
+  }
 }
 
 function requireHuman(ctx: Context): void {
@@ -144,20 +167,25 @@ function matching(ctx: Context, resource: UseResource, request: UseRequest, perm
 
 /** Each action is independent. Metadata access never implies copying, training, or distribution. */
 export function decideUse(ctx: Context, resource: UseResource, request: UseRequest, grants: readonly RightsGrant[], consents: readonly Consent[]): UseDecision {
+  // Capture every collection and field before matching. Custom iterators, filters
+  // and getters must not change the meaning between validation and selection.
+  ({ ctx, resource, request, grants, consents } = copyJson({ ctx, resource, request, grants, consents }));
   assertContext(ctx);
   assertRef(ctx, resource.ref);
   assertDigest(resource.digest);
   invariant(USE_ACTIONS.includes(request.action), 'invalid_action', 'Unknown use action');
   nonempty(request.audience, 'Audience', 200);
   if (request.attribution !== null) nonempty(request.attribution, 'Attribution');
+  invariant(Array.isArray(resource.requiredConsentSubjects), 'invalid_permission', 'Consent subjects must be an explicit array');
   for (const subject of resource.requiredConsentSubjects) nonempty(subject, 'Required consent subject', 200);
   invariant(new Set(resource.requiredConsentSubjects).size === resource.requiredConsentSubjects.length, 'invalid_permission', 'Consent subjects must be unique');
   // A current permission set must contain one revision per identity; mixing old and new
   // revisions must not resurrect a withdrawn permission.
-  for (const permissions of [grants, consents]) {
+  invariant(Array.isArray(grants) && Array.isArray(consents), 'invalid_permission', 'Explicit permission collections required');
+  for (const [permissions, kind] of [[grants, 'rights-grant'], [consents, 'consent']] as const) {
     const keys = new Set<string>();
     for (const permission of permissions) {
-      assertRef(ctx, permission.ref);
+      validatePermission(ctx, permission, kind);
       const key = `${permission.ref.kind}:${permission.ref.id}`;
       invariant(!keys.has(key), 'ambiguous_permission', 'Only the current revision of each permission may be supplied');
       keys.add(key);
@@ -179,3 +207,4 @@ export function decideUse(ctx: Context, resource: UseResource, request: UseReque
     grants: selectedGrant === undefined ? [] : [exactBinding(selectedGrant.ref, selectedGrant)],
     consents: selectedConsents.map(item => exactBinding(item.ref, item)), checkedAt: ctx.now });
 }
+

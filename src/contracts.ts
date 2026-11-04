@@ -17,14 +17,27 @@ export function nonempty(value: unknown, label: string, max=2000): asserts value
   invariant(typeof value==='string' && value.trim().length>0 && value.length<=max, 'invalid_input', `${label} must be non-empty and at most ${max} characters`);
 }
 export function validTime(value: string): number {
+  invariant(typeof value==='string','invalid_time','Timestamp strings required');
   const n=Date.parse(value); invariant(Number.isFinite(n), 'invalid_time', 'Invalid timestamp'); return n;
 }
 export function canonical(value: unknown): string {
   if (value===null || typeof value==='string' || typeof value==='boolean') return JSON.stringify(value);
   if (typeof value==='number') { invariant(Number.isFinite(value),'invalid_json','Finite numbers required'); return JSON.stringify(value); }
-  if (Array.isArray(value)) return '['+value.map(canonical).join(',')+']';
+  if (Array.isArray(value)) {
+    invariant(Object.getPrototypeOf(value)===Array.prototype && Reflect.ownKeys(value).length===value.length+1,'invalid_json','Plain JSON arrays without extra properties required');
+    for(let index=0;index<value.length;index++) {
+      const property=Object.getOwnPropertyDescriptor(value,String(index));
+      invariant(property && Object.hasOwn(property,'value') && property.enumerable,'invalid_json','Dense JSON data elements required');
+    }
+    return '['+value.map(canonical).join(',')+']';
+  }
   invariant(typeof value==='object' && Object.getPrototypeOf(value)===Object.prototype,'invalid_json','Plain JSON required');
-  return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical((value as Record<string,unknown>)[k])).join(',')+'}';
+  const keys=Reflect.ownKeys(value);
+  invariant(keys.every(key=>{
+    const property=Object.getOwnPropertyDescriptor(value,key);
+    return typeof key==='string' && property && property.enumerable && Object.hasOwn(property,'value');
+  }),'invalid_json','Enumerable JSON data properties required');
+  return '{'+(keys as string[]).sort().map(k=>JSON.stringify(k)+':'+canonical(Object.getOwnPropertyDescriptor(value,k)!.value)).join(',')+'}';
 }
 export function digest(value: unknown): string { return createHash('sha256').update(canonical(value)).digest('hex'); }
 export function hashBytes(bytes: Uint8Array): string { return createHash('sha256').update(bytes).digest('hex'); }
@@ -39,3 +52,4 @@ export function validateRef(value:unknown):Ref{
  for(const field of ['tenantId','projectId','kind','id'])nonempty(r[field],field,128);
  invariant(Number.isSafeInteger(r.revision)&&(r.revision as number)>0,'invalid_reference','Positive revision required');return structuredClone(r) as Ref;
 }
+
