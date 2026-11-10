@@ -14,13 +14,14 @@ async function publicKeys(env: NodeJS.ProcessEnv): Promise<Record<string, string
 
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<{ close(): Promise<void>; port: number }> {
   if (env.DATABASE_URL === undefined || env.DATABASE_URL === '') throw new Error('DATABASE_URL is required');
+  const keys = await publicKeys(env);
   const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: Number(env.DATABASE_POOL_MAX ?? 10) });
   const sql = pgSql(pool);
   await migrate(sql);
   const engine = createEngine({ sql, config: { ...(env.CONSENT_DEFAULT_LOCALE === undefined ? {} : { defaultLocale: env.CONSENT_DEFAULT_LOCALE }), allowSelfReview: env.CONSENT_ALLOW_SELF_REVIEW === 'true' } });
   const handler = createHttpHandler({
     name: manifest.id, version: manifest.version, routes: routes(engine), health: () => engine.health(), maxBodyBytes: 1024 * 1024,
-    verify: createTokenVerifier({ publicKeys: await publicKeys(env), ...(env.IDENTITY_ISSUER === undefined ? {} : { issuer: env.IDENTITY_ISSUER }) }),
+    verify: createTokenVerifier({ publicKeys: keys, ...(env.IDENTITY_ISSUER === undefined ? {} : { issuer: env.IDENTITY_ISSUER }) }),
     onError: (error, info) => { console.error(JSON.stringify({ level: 'error', requestId: info.requestId, method: info.method, path: info.path, error: error instanceof Error ? error.name : 'unknown' })); },
   });
   const server = await serve(handler, Number(env.PORT ?? 8111), env.HOST ?? '127.0.0.1');
@@ -35,7 +36,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<{ clos
   const address = server.address();
   return {
     port: typeof address === 'object' && address !== null ? address.port : 0,
-    async close() { stopped = true; await new Promise<void>((r) => server.close(() => r())); await Promise.race([loop, new Promise((r) => setTimeout(r, interval + 100))]); await pool.end(); },
+    async close() { stopped = true; server.closeAllConnections(); await new Promise<void>((r) => server.close(() => r())); await Promise.race([loop, new Promise((r) => setTimeout(r, interval + 100))]); await pool.end(); },
   };
 }
 

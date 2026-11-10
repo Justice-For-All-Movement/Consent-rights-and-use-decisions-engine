@@ -975,15 +975,18 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
       const destination = optText(input.destination, 'Destination', 300);
       const now = clock(ctx);
       return sql.tx((tx) => idempotent(tx, S, ctx, input.idempotencyKey, { op: 'recordUse', decision: input.decisionRef, subjects, output, action: input.action, audience: input.audience ?? null, destination }, async () => {
-        const d = (await tx.query(`select * from ${S}.decisions where tenant_id=$1 and project_id=$2 and id=$3 for share`, [...sc(ctx), uuidOf(input.decisionRef, ['decision'])]))[0] ?? notFound();
+        // Lock order is permission → decision everywhere (a withdrawal takes the same order), so the two cannot deadlock.
+        // The permission versions the decision relied on must still be the current, active ones; the share lock orders this
+        // against a concurrent withdrawal or change, so a use is either refused or visible to that withdrawal.
+        const decisionId = uuidOf(input.decisionRef, ['decision']);
+        const peek = (await tx.query(`select permission_refs from ${S}.decisions where tenant_id=$1 and project_id=$2 and id=$3`, [...sc(ctx), decisionId]))[0] ?? notFound();
+        const pinned = (peek.permission_refs as string[]).map((r) => parseUref(r)).filter((r) => r.kind === 'permission' || r.kind === 'license');
+        const live = await tx.query(`select id from ${S}.permissions where tenant_id=$1 and project_id=$2 and is_current and status='active' and (ends_at is null or ends_at > $5)
+          and (id, revision) in (select * from unnest($3::uuid[], $4::int[])) order by id for share`, [...sc(ctx), pinned.map((r) => r.id), pinned.map((r) => r.revision ?? 0), now]);
+        const d = (await tx.query(`select * from ${S}.decisions where tenant_id=$1 and project_id=$2 and id=$3 for share`, [...sc(ctx), decisionId]))[0] ?? notFound();
         const req = d.request as DecisionRequest;
         if (d.decision !== 'allow') throw new DomainError('consent_denied', 'The referenced decision does not allow this use');
         if (d.stale === true) throw new DomainError('stale', 'The referenced decision is stale; request a new decision');
-        // The permission versions the decision relied on must still be the current, active ones. The share lock orders this
-        // against a concurrent withdrawal or change, so a use is either refused or visible to that withdrawal.
-        const pinned = (d.permission_refs as string[]).map((r) => parseUref(r)).filter((r) => r.kind === 'permission' || r.kind === 'license');
-        const live = await tx.query(`select id from ${S}.permissions where tenant_id=$1 and project_id=$2 and is_current and status='active' and (ends_at is null or ends_at > $5)
-          and (id, revision) in (select * from unnest($3::uuid[], $4::int[])) for share`, [...sc(ctx), pinned.map((r) => r.id), pinned.map((r) => r.revision ?? 0), now]);
         if (live.length !== pinned.length) throw new DomainError('stale', 'A permission this decision relied on has changed; request a new decision');
         const audience = input.audience === undefined ? req.audience : text(input.audience, 'Audience', 120);
         invariant(req.action === input.action && audience === req.audience && subjects.every((s) => req.subjects.includes(s)) && (destination === null || req.destination === null || destination === req.destination), 'invalid_input', 'The use does not match the referenced decision');
