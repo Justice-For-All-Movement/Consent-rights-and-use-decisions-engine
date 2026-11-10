@@ -27,6 +27,18 @@
     "./participant-client": {
       "types": "./dist/participant-client.d.ts",
       "default": "./dist/participant-client.js"
+    },
+    "./engine": {
+      "types": "./dist/engine/index.d.ts",
+      "default": "./dist/engine/index.js"
+    },
+    "./serve": {
+      "types": "./dist/engine/serve.d.ts",
+      "default": "./dist/engine/serve.js"
+    },
+    "./service-kit": {
+      "types": "./dist/service-kit.d.ts",
+      "default": "./dist/service-kit.js"
     }
   },
   "engines": {
@@ -38,7 +50,9 @@
     "check": "npm run typecheck && npm test && npm run build && node scripts/validate-pr-registry.mjs",
     "build": "tsc -p tsconfig.build.json",
     "prepare": "npm run build",
-    "test:postgres": "node --test integration/postgres-permissions.test.ts"
+    "test:postgres": "node --test integration/postgres-permissions.test.ts",
+    "serve": "node src/engine/serve.ts",
+    "test:engine": "node --test tests/engine*.test.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.12",
