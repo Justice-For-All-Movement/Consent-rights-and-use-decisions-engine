@@ -416,12 +416,11 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
     const up = await ancestors(q, ctx, request.subjects);
     const chains = request.subjects.map((subject) => ({ subject, nodes: up.filter((r) => r.subject === subject).map((r) => r.node) }));
     const all = [...new Set(up.map((r) => r.node))].sort();
-    const [subjects, holders, holds, policy] = await Promise.all([
-      q.query(`select ref, kind, submitted, collections, flags from ${S}.subjects where tenant_id=$1 and project_id=$2 and ref = any($3)`, [...sc(ctx), all]),
-      q.query(`select subject_ref, holder_id from ${S}.subject_holders where tenant_id=$1 and project_id=$2 and subject_ref = any($3) and removed_at is null order by holder_id`, [...sc(ctx), all]),
-      q.query(`select id, subject_ref, actions, effect, placed_at from ${S}.holds where tenant_id=$1 and project_id=$2 and subject_ref = any($3) and status='active' order by id`, [...sc(ctx), all]),
-      currentPolicy(q, ctx),
-    ]);
+    // Sequential on purpose: inside a transaction all statements share one connection.
+    const subjects = await q.query(`select ref, kind, submitted, collections, flags from ${S}.subjects where tenant_id=$1 and project_id=$2 and ref = any($3)`, [...sc(ctx), all]);
+    const holders = await q.query(`select subject_ref, holder_id from ${S}.subject_holders where tenant_id=$1 and project_id=$2 and subject_ref = any($3) and removed_at is null order by holder_id`, [...sc(ctx), all]);
+    const holds = await q.query(`select id, subject_ref, actions, effect, placed_at from ${S}.holds where tenant_id=$1 and project_id=$2 and subject_ref = any($3) and status='active' order by id`, [...sc(ctx), all]);
+    const policy = await currentPolicy(q, ctx);
     const nodes: Record<string, FactNode> = {};
     for (const ref of all) {
       const s = subjects.find((r) => r.ref === ref);
@@ -430,10 +429,8 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
         holds: holds.filter((h) => h.subject_ref === ref).map((h) => ({ id: h.id as string, actions: h.actions as string[], effect: h.effect as 'review' | 'deny', placedAt: iso(h.placed_at) })) };
     }
     const collections = [...new Set(Object.values(nodes).flatMap((n) => n.collections))];
-    const [permissionRows, determinationRows] = await Promise.all([
-      q.query(`select * from ${S}.permissions where tenant_id=$1 and project_id=$2 and is_current and ((scope_type='subject' and scope_value = any($3)) or (scope_type='collection' and scope_value = any($4)) or scope_type in ('kind','pattern')) order by id`, [...sc(ctx), all, collections]),
-      q.query(`select * from ${S}.determinations where tenant_id=$1 and project_id=$2 and subject_ref = any($3) and action=$4 order by id`, [...sc(ctx), [...request.subjects], request.action]),
-    ]);
+    const permissionRows = await q.query(`select * from ${S}.permissions where tenant_id=$1 and project_id=$2 and is_current and ((scope_type='subject' and scope_value = any($3)) or (scope_type='collection' and scope_value = any($4)) or scope_type in ('kind','pattern')) order by id`, [...sc(ctx), all, collections]);
+    const determinationRows = await q.query(`select * from ${S}.determinations where tenant_id=$1 and project_id=$2 and subject_ref = any($3) and action=$4 order by id`, [...sc(ctx), [...request.subjects], request.action]);
     const nodeList = Object.values(nodes);
     const permissions = permissionRows.map(factPermission).filter((p) => nodeList.some((n) => permissionApplies(p, n)));
     const determinations: FactDetermination[] = determinationRows.map((d) => ({ id: d.id as string, subject: d.subject_ref as string, action: d.action as string, purpose: d.purpose as string, audience: d.audience as string, territory: d.territory as string, outcome: d.outcome as 'approve' | 'reject', restrictions: d.restrictions as string[], decidedAt: iso(d.decided_at), validUntil: isoN(d.valid_until) }));
@@ -537,8 +534,9 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
     const c = at(ctx, now);
     await scheduleExpiry(tx, c, row);
     const narrowed = narrows(effect, prev, next);
-    const affected = narrowed ? await flagUses(tx, ctx, view.id, removed.length > 0 && canonical({ ...prev, actions: [] }) === canonical({ ...next, actions: [] }) ? removed : null, { cause: 'permission_changed', permission: view.ref, at: now }) : [];
+    // Stale first: it waits for any in-flight recordUse holding the decision, so the use register read below is complete.
     const stale = await markStale(tx, ctx, { permissionId: view.id }, { reason: 'permission_changed', cause: view.ref, at: now });
+    const affected = narrowed ? await flagUses(tx, ctx, view.id, removed.length > 0 && canonical({ ...prev, actions: [] }) === canonical({ ...next, actions: [] }) ? removed : null, { cause: 'permission_changed', permission: view.ref, at: now }) : [];
     const subjects = await subjectsOf(tx, ctx, row);
     await appendAudit(tx, S, c, 'consent.permission_change', view.ref, { fromRevision: current.revision as number, widened: wider, narrowed, bySelf: self, removedActions: removed, affectedUses: affected.map((u) => u.ref), staleDecisions: stale.length });
     await emitEvent(tx, S, c, 'consent.permission_changed', view.ref, { permissionId: view.id, revision: view.revision, widened: wider, narrowed, subjects, affectedOutputs: [...new Set(affected.map((u) => u.output))].sort() });
@@ -559,9 +557,9 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
     const view = permissionView(row, now);
     const id = randomUUID();
     const withdrawalRef = `E11:withdrawal:${id}`;
+    const stale = await markStale(tx, ctx, { permissionId: view.id }, { reason: 'permission_withdrawn', cause: view.ref, at: now });
     const affected = current.effect === 'allow' ? await flagUses(tx, ctx, view.id, scope === 'full' ? null : actions, { cause: 'permission_withdrawn', withdrawal: withdrawalRef, permission: view.ref, at: now }) : [];
     const affectedOutputs = [...new Set(affected.map((u) => u.output))].sort();
-    const stale = await markStale(tx, ctx, { permissionId: view.id }, { reason: 'permission_withdrawn', cause: view.ref, at: now });
     const subjects = await subjectsOf(tx, ctx, row);
     await tx.query(`insert into ${S}.withdrawals (id, tenant_id, project_id, permission_id, from_revision, to_revision, scope, actions, effective_at, reason, by_actor, by_holder, subjects, affected_outputs, affected_uses, created_at)
       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::uuid[],$16)`, [id, ...sc(ctx), view.id, current.revision, view.revision, scope, actions, effectiveAt, reason, ctx.actor.id, self, subjects, affectedOutputs, affected.map((u) => u.id), now]);
@@ -587,8 +585,8 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
         if (current === undefined || current.status !== 'active' || current.ends_at === null || Date.parse(iso(current.ends_at)) > Date.parse(now)) return { expired: false };
         const row = await revise(tx, ctx, current, { status: 'expired' }, 'expired', now);
         const view = permissionView(row, now);
-        const affected = current.effect === 'allow' ? (await flagUses(tx, ctx, view.id, null, { cause: 'permission_expired', permission: view.ref, at: now })).filter((u) => u.distribution) : [];
         await markStale(tx, ctx, { permissionId: view.id }, { reason: 'permission_expired', cause: view.ref, at: now });
+        const affected = current.effect === 'allow' ? (await flagUses(tx, ctx, view.id, null, { cause: 'permission_expired', permission: view.ref, at: now })).filter((u) => u.distribution) : [];
         const subjects = await subjectsOf(tx, ctx, row);
         await appendAudit(tx, S, ctx, 'consent.permission_expire', view.ref, { endsAt: view.endsAt, affectedUses: affected.map((u) => u.ref) });
         await emitEvent(tx, S, ctx, 'consent.permission_expired', view.ref, { permissionId: view.id, revision: view.revision, subjects, affectedOutputs: [...new Set(affected.map((u) => u.output))].sort() });
@@ -747,7 +745,7 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
       const compartment = optText(input.compartment, 'Compartment', 200);
       if (compartment !== null) requireCompartment(ctx, compartment);
       const holderId = uuidOf(input.holderId, ['holder']);
-      return sql.tx((tx) => idempotent(tx, S, ctx, input.idempotencyKey, { op: 'recordPermission', holderId, scopeType, scopeValue, effect, terms, provenance: { ...provenance, recordedAt: null }, compartment }, async () => {
+      return sql.tx((tx) => idempotent(tx, S, ctx, input.idempotencyKey, { op: 'recordPermission', input: { ...input, idempotencyKey: undefined } }, async () => {
         await holderRow(tx, ctx, holderId);
         if (scopeType === 'subject') { await ensureSubject(tx, ctx, scopeValue, input.subjectKind, now); await linkHolder(tx, ctx, scopeValue, holderId, input.holderRole === undefined ? 'rights_holder' : text(input.holderRole, 'Holder role', 80), now); }
         return (await createPermission(tx, ctx, now, { kind: 'permission', effect, holder_id: holderId, scope_type: scopeType, scope_value: scopeValue, provenance, license: null, compartment }, terms, {})) as unknown as Json;
@@ -767,7 +765,7 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
       const provenance = provenanceOf({ method: 'license_document', evidenceRef: license.proofRef }, ctx, now);
       const compartment = optText(input.compartment, 'Compartment', 200);
       if (compartment !== null) requireCompartment(ctx, compartment);
-      return sql.tx((tx) => idempotent(tx, S, ctx, input.idempotencyKey, { op: 'recordLicense', subject, terms, license, compartment }, async () => {
+      return sql.tx((tx) => idempotent(tx, S, ctx, input.idempotencyKey, { op: 'recordLicense', input: { ...input, idempotencyKey: undefined } }, async () => {
         await ensureSubject(tx, ctx, subject, input.subjectKind ?? 'asset', now);
         return (await createPermission(tx, ctx, now, { kind: 'license', effect: 'allow', holder_id: null, scope_type: 'subject', scope_value: subject, provenance, license, compartment }, terms, { licenseType: license.licenseType })) as unknown as Json;
       })) as unknown as Promise<PermissionView>;
@@ -981,6 +979,12 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
         const req = d.request as DecisionRequest;
         if (d.decision !== 'allow') throw new DomainError('consent_denied', 'The referenced decision does not allow this use');
         if (d.stale === true) throw new DomainError('stale', 'The referenced decision is stale; request a new decision');
+        // The permission versions the decision relied on must still be the current, active ones. The share lock orders this
+        // against a concurrent withdrawal or change, so a use is either refused or visible to that withdrawal.
+        const pinned = (d.permission_refs as string[]).map((r) => parseUref(r)).filter((r) => r.kind === 'permission' || r.kind === 'license');
+        const live = await tx.query(`select id from ${S}.permissions where tenant_id=$1 and project_id=$2 and is_current and status='active' and (ends_at is null or ends_at > $5)
+          and (id, revision) in (select * from unnest($3::uuid[], $4::int[])) for share`, [...sc(ctx), pinned.map((r) => r.id), pinned.map((r) => r.revision ?? 0), now]);
+        if (live.length !== pinned.length) throw new DomainError('stale', 'A permission this decision relied on has changed; request a new decision');
         const audience = input.audience === undefined ? req.audience : text(input.audience, 'Audience', 120);
         invariant(req.action === input.action && audience === req.audience && subjects.every((s) => req.subjects.includes(s)) && (destination === null || req.destination === null || destination === req.destination), 'invalid_input', 'The use does not match the referenced decision');
         const chain = [...new Set((await ancestors(tx, ctx, subjects)).map((r) => r.node))].sort();
