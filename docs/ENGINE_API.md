@@ -114,6 +114,8 @@ listPermissions(ctx, { subject?, holderId?, status?, kind?, limit? }?): Promise<
 listMyPermissions(ctx, { locale? }?): Promise<PermissionView[]>           // [consent:self] holder.actorId = ctx.actor.id; includes plain-language text
 changeMyPermission(ctx, { permissionId, patch, idempotencyKey? }): Promise<PermissionView>   // [consent:self]
 withdrawMyPermission(ctx, { permissionId, actions?, reason?, idempotencyKey? }): Promise<WithdrawalResult>  // [consent:self] affectedUses/staleDecisions blanked
+withdrawAllForHolder(ctx, { holderId, reason?, idempotencyKey? }): Promise<{ holderId, withdrawals: WithdrawalResult[] }>  // [consent:withdraw] every current grant (effect allow); refusals/restrictions kept
+withdrawAllMine(ctx, { reason?, idempotencyKey? }?): Promise<{ withdrawals: WithdrawalResult[] }>  // [consent:self] same for the caller's own holder; detail blanked
 placeHold(ctx, { subject, reasonCode, actions?, effect?, note?, idempotencyKey? }): Promise<HoldView>  // [consent:write]
 releaseHold(ctx, { holdId, reason, idempotencyKey? }): Promise<HoldView>  // [consent:approve] human
 listHolds(ctx, { subject?, status? }?): Promise<HoldView[]>               // [consent:read]
@@ -164,7 +166,8 @@ Standard: `GET /healthz`, `GET /v1/manifest` (public), `GET /v1/inspect?ref=`, `
 | `POST /v1/permissions` · `GET /v1/permissions[?subject&holder&status&kind]` · `GET /v1/permissions/:id[?revision&locale]` · `GET /v1/permissions/:id/history` | recordPermission · listPermissions · getPermission · permissionHistory |
 | `POST /v1/permissions/:id/changes` · `POST /v1/permissions/:id/review` · `POST /v1/permissions/:id/withdraw` · `POST /v1/consents/:id/withdraw` | changePermission · reviewPermission · withdraw (both paths) |
 | `POST /v1/licenses` | recordLicense |
-| `GET /v1/self/permissions[?locale]` · `POST /v1/self/permissions/:id/changes` · `POST /v1/self/permissions/:id/withdraw` | participant self-service |
+| `GET /v1/self/permissions[?locale]` · `POST /v1/self/permissions/:id/changes` · `POST /v1/self/permissions/:id/withdraw` · `POST /v1/self/withdraw-all` | participant self-service |
+| `POST /v1/holders/:id/withdraw-all` | withdrawAllForHolder |
 | `POST /v1/holds` · `GET /v1/holds` · `POST /v1/holds/:id/release` | placeHold · listHolds · releaseHold |
 | `GET /v1/policy` · `PUT /v1/policy` · `GET /v1/templates/:locale` · `PUT /v1/templates/:locale` | policy and templates |
 | `POST /v1/uses` · `GET /v1/uses[?subject&output&state]` · `GET /v1/assets/:ref/uses` · `POST /v1/uses/:id/follow-up` | recordUse · listUses · listUses(subject = url-encoded uref) · resolveFollowUp |
@@ -220,7 +223,7 @@ tenant and project isolation; fail-closed authorization for every method; idempo
 
 ## Not implemented / not verified
 
-- Future-dated withdrawals (use `endsAt`). Bulk withdrawal of all of a holder's permissions in one call.
+- Future-dated withdrawals (by design: set `endsAt` to end a permission later).
 - Audience and territory hierarchies (matching is exact, plus `any` and the `internal` rule above).
 - Enforcement inside other engines: E11 decides and records; callers must call `decide`, honour `restrictions`, and `recordUse`.
   No cross-engine integration test exists in this repository.

@@ -314,6 +314,10 @@ export interface ConsentEngine extends StandardEngine, UseDecisionPort {
   listMyPermissions(ctx: ServiceContext, options?: { locale?: string }): Promise<PermissionView[]>;
   changeMyPermission(ctx: ServiceContext, input: { permissionId: string; patch: PermissionPatch; idempotencyKey?: string }): Promise<PermissionView>;
   withdrawMyPermission(ctx: ServiceContext, input: { permissionId: string; actions?: readonly UseAction[]; reason?: string; idempotencyKey?: string }): Promise<WithdrawalResult>;
+  /** Withdraws every grant (effect `allow`) the holder currently has in this project, in one transaction. Refusals and standing restrictions are kept. */
+  withdrawAllForHolder(ctx: ServiceContext, input: { holderId: string; reason?: string; idempotencyKey?: string }): Promise<{ holderId: string; withdrawals: WithdrawalResult[] }>;
+  /** The participant's own "withdraw everything": every grant held by the holder mapped to the caller. */
+  withdrawAllMine(ctx: ServiceContext, input?: { reason?: string; idempotencyKey?: string }): Promise<{ withdrawals: WithdrawalResult[] }>;
   placeHold(ctx: ServiceContext, input: { subject: string; reasonCode: string; actions?: readonly UseAction[]; effect?: 'review' | 'deny'; note?: string; idempotencyKey?: string }): Promise<HoldView>;
   releaseHold(ctx: ServiceContext, input: { holdId: string; reason: string; idempotencyKey?: string }): Promise<HoldView>;
   listHolds(ctx: ServiceContext, query?: { subject?: string; status?: 'active' | 'released' }): Promise<HoldView[]>;
@@ -859,6 +863,34 @@ export function createEngine(deps: ConsentDeps): ConsentEngine {
       })) as unknown as Promise<WithdrawalResult>;
     },
 
+    async withdrawAllForHolder(ctx, input) {
+      await sensitive(ctx, 'consent:withdraw');
+      const now = clock(ctx);
+      const holderId = uuidOf(input.holderId, ['holder']);
+      return sql.tx((tx) => idempotent(tx, S, ctx, input.idempotencyKey, { op: 'withdrawAllForHolder', holderId, reason: input.reason ?? null }, async () => {
+        const holder = (await tx.query(`select id from ${S}.holders where tenant_id=$1 and project_id=$2 and id=$3`, [...sc(ctx), holderId]))[0];
+        if (holder === undefined) notFound();
+        const rows = await tx.query(`select * from ${S}.permissions where tenant_id=$1 and project_id=$2 and holder_id=$3 and is_current and kind='permission' and effect='allow' and status in ('active','expired') and (compartment is null or compartment = any($4::text[])) order by id for update`, [...sc(ctx), holderId, [...ctx.compartments]]);
+        const withdrawals: WithdrawalResult[] = [];
+        for (const row of rows) withdrawals.push(await withdrawIn(tx, ctx, now, row, input.reason === undefined ? {} : { reason: input.reason }, false));
+        return { holderId, withdrawals } as unknown as Json;
+      })) as unknown as Promise<{ holderId: string; withdrawals: WithdrawalResult[] }>;
+    },
+    async withdrawAllMine(ctx, input = {}) {
+      requireCapability(ctx, 'consent:self');
+      const now = clock(ctx);
+      return sql.tx((tx) => idempotent(tx, S, ctx, input.idempotencyKey, { op: 'withdrawAllMine', reason: input.reason ?? null }, async () => {
+        const rows = await tx.query(`select p.* from ${S}.permissions p join ${S}.holders h on h.id = p.holder_id and h.tenant_id = p.tenant_id and h.project_id = p.project_id
+          where p.tenant_id=$1 and p.project_id=$2 and h.actor_id=$3 and p.is_current and p.kind='permission' and p.effect='allow' and p.status in ('active','expired') order by p.id for update of p`, [...sc(ctx), ctx.actor.id]);
+        const withdrawals: Json[] = [];
+        for (const row of rows) {
+          const result = await withdrawIn(tx, ctx, now, row, input.reason === undefined ? {} : { reason: input.reason }, true);
+          withdrawals.push({ ...result, affectedUses: [], staleDecisions: [] } as unknown as Json);
+        }
+        return { withdrawals } as Json;
+      })) as unknown as Promise<{ withdrawals: WithdrawalResult[] }>;
+    },
+
     // ── protective holds ──
     async placeHold(ctx, input) {
       requireCapability(ctx, 'consent:write');
@@ -1212,6 +1244,8 @@ export function routes(engine: ConsentEngine): Route[] {
     { method: 'POST', path: '/v1/licenses', handler: async (r) => ({ status: 201, json: await engine.recordLicense(r.ctx, body(r) as unknown as RecordLicenseInput) }) },
     { method: 'GET', path: '/v1/self/permissions', handler: async (r) => j(await engine.listMyPermissions(r.ctx, opt('locale', r.query.get('locale')))) },
     { method: 'POST', path: '/v1/self/permissions/:id/changes', handler: async (r) => j(await engine.changeMyPermission(r.ctx, { ...body(r), permissionId: r.params.id } as unknown as In<'changeMyPermission'>)) },
+    { method: 'POST', path: '/v1/holders/:id/withdraw-all', handler: async (r) => j(await engine.withdrawAllForHolder(r.ctx, { ...(isObject(r.body) ? r.body : {}), holderId: r.params.id } as unknown as In<'withdrawAllForHolder'>)) },
+    { method: 'POST', path: '/v1/self/withdraw-all', handler: async (r) => j(await engine.withdrawAllMine(r.ctx, (isObject(r.body) ? r.body : {}) as unknown as In<'withdrawAllMine'>)) },
     { method: 'POST', path: '/v1/self/permissions/:id/withdraw', handler: async (r) => j(await engine.withdrawMyPermission(r.ctx, { ...(isObject(r.body) ? r.body : {}), permissionId: r.params.id } as unknown as In<'withdrawMyPermission'>)) },
     { method: 'POST', path: '/v1/holds', handler: async (r) => ({ status: 201, json: await engine.placeHold(r.ctx, body(r) as unknown as In<'placeHold'>) }) },
     { method: 'GET', path: '/v1/holds', handler: async (r) => j(await engine.listHolds(r.ctx, { ...opt('subject', r.query.get('subject')), ...(r.query.get('status') === null ? {} : { status: r.query.get('status') as 'active' | 'released' }) })) },

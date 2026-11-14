@@ -633,3 +633,42 @@ test('HTTP end to end with signed tokens', { skip }, async () => {
     } finally { server.close(); }
   });
 });
+
+test('withdraw all: one call ends every grant of a holder, keeps refusals and other holders, flags uses; participant variant', { skip }, async () => {
+  await world(async ({ engine }) => {
+    const c = ctx();
+    const mine = await holder(engine, c, 'E01:identity:bulk-1', 'participant-bulk');
+    const other = await holder(engine, c, 'E01:identity:bulk-2');
+    const a = await grant(engine, c, { holderId: mine, scope: { type: 'subject', value: 'E05:evidence:bulk-a' }, actions: ['cite', 'publish'], audiences: ['public'] });
+    const b = await grant(engine, c, { holderId: mine, scope: { type: 'subject', value: 'E05:evidence:bulk-b' }, actions: ['reproduce'], audiences: ['public'] });
+    const refusal = await engine.recordPermission(c, { holderId: mine, scope: { type: 'subject', value: 'E05:evidence:bulk-c' }, effect: 'deny', actions: ['adapt'], audiences: ['any'], provenance: SIGNED });
+    const keep = await grant(engine, c, { holderId: other, scope: { type: 'subject', value: 'E05:evidence:bulk-d' }, actions: ['cite'], audiences: ['public'] });
+    const d = await ask(engine, c, 'E05:evidence:bulk-a', 'publish', { audience: 'public' });
+    await engine.recordUse(c, { decisionRef: d.decisionRef, subjects: ['E05:evidence:bulk-a'], output: 'E12:release:bulk', action: 'publish', audience: 'public' });
+
+    await assert.rejects(engine.withdrawAllForHolder(ctx({ capabilities: ['consent:*'] }), { holderId: mine }), code('forbidden'), 'withdrawal is a sensitive capability');
+    await assert.rejects(engine.withdrawAllForHolder(ctx({ tenantId: 't2' }), { holderId: mine }), code('not_found'), 'another organization cannot reach the holder');
+    const out = await engine.withdrawAllForHolder(c, { holderId: mine, reason: 'holder asked by phone', idempotencyKey: 'bulk-1' });
+    assert.deepEqual(out.withdrawals.map((w) => w.permission.id).sort(), [a.id, b.id].sort());
+    assert.ok(out.withdrawals.every((w) => w.scope === 'full' && w.permission.status === 'withdrawn'));
+    assert.deepEqual(out.withdrawals.flatMap((w) => w.affectedOutputs), ['E12:release:bulk']);
+    const replay = await engine.withdrawAllForHolder(c, { holderId: mine, reason: 'holder asked by phone', idempotencyKey: 'bulk-1' });
+    assert.deepEqual(replay.withdrawals.map((w) => w.withdrawalRef).sort(), out.withdrawals.map((w) => w.withdrawalRef).sort(), 'idempotent replay');
+    assert.equal((await engine.getPermission(c, refusal.id)).status, 'active', 'a refusal is never lifted by a bulk withdrawal');
+    assert.equal((await engine.getPermission(c, keep.id)).status, 'active', 'other holders are untouched');
+    assert.equal((await ask(engine, c, 'E05:evidence:bulk-a', 'cite', { audience: 'public' })).decision, 'deny');
+    assert.equal((await ask(engine, c, 'E05:evidence:bulk-d', 'cite', { audience: 'public' })).decision, 'allow');
+    assert.deepEqual((await engine.listUses(c, { state: 'needs_follow_up' })).map((u) => u.output), ['E12:release:bulk']);
+    assert.deepEqual((await engine.withdrawAllForHolder(c, { holderId: mine })).withdrawals, [], 'nothing left to withdraw');
+
+    // Participant self-service: only their own grants; no internal detail returned.
+    const again = await grant(engine, c, { holderId: mine, scope: { type: 'subject', value: 'E05:evidence:bulk-e' }, actions: ['cite'], audiences: ['public'] });
+    const me = ctx({ actorId: 'participant-bulk', capabilities: ['consent:self'] });
+    await assert.rejects(engine.withdrawAllMine(ctx({ actorId: 'participant-bulk', capabilities: ['consent:read'] })), code('forbidden'));
+    const self = await engine.withdrawAllMine(me, {});
+    assert.deepEqual(self.withdrawals.map((w) => w.permission.id), [again.id]);
+    assert.ok(self.withdrawals.every((w) => w.affectedUses.length === 0 && w.staleDecisions.length === 0));
+    assert.equal((await engine.getPermission(c, keep.id)).status, 'active');
+    assert.deepEqual((await engine.withdrawAllMine(ctx({ actorId: 'nobody', capabilities: ['consent:self'] }))).withdrawals, []);
+  });
+});
